@@ -2,20 +2,22 @@ package services
 
 import (
 	"github.com/gorilla/websocket"
+	"go-scrum/models"
+	"gorm.io/gorm"
 	"log"
 )
 
-type Auth struct {
-	Login    string `json:"login"`
-	Password string `json:"password"`
-}
-type AuthService struct{}
-
-func NewAuthService() *AuthService {
-	return &AuthService{}
+type AuthService struct {
+	db *gorm.DB
 }
 
-func (a *AuthService) Login(conn *websocket.Conn, auth *Auth) {
+func NewAuthService(db *gorm.DB) *AuthService {
+	return &AuthService{
+		db,
+	}
+}
+
+func (a *AuthService) Login(conn *websocket.Conn, auth *models.Auth) {
 	err := conn.WriteJSON(auth)
 	if err != nil {
 		err := conn.Close()
