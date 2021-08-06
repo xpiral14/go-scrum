@@ -1,27 +1,30 @@
 package main
 
 import (
+	"fmt"
 	"go-scrum/controllers"
+	"go-scrum/services"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"log"
 	"net/http"
 )
 
-var Db *gorm.DB
-
 func main() {
+	port := 8081
 	db, err := gorm.Open(sqlite.Open("tmp.db"), &gorm.Config{})
-	Db = db
 	if err != nil {
 		panic("Failed to connect database")
 	}
 
+	services.StartServices(db)
+	services.MigrationServiceInstace.Migrate()
+
 	http.HandleFunc("/ws", controllers.NewWebSocketController().Handler)
 
-	log.Println("Server running on localhost:8080")
+	log.Printf("Server running on localhost:%v", port)
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil); err != nil {
 		log.Fatalln(err)
 	}
 }

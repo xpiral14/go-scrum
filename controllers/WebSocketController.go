@@ -20,9 +20,10 @@ func NewWebSocketController() *WebSocketController {
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
-var authAttributes services.Auth
-var authService = services.NewAuthService()
 
 func (ws *WebSocketController) Handler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -33,13 +34,12 @@ func (ws *WebSocketController) Handler(w http.ResponseWriter, r *http.Request) {
 
 	for {
 		messageType, message, err := conn.ReadMessage()
-
 		if err != nil {
 			log.Println(err)
 			return
 		}
 		command, _ := strconv.Atoi(string(message[0:5]))
-		payload := message[5:]
+		payload := message[3:]
 
 		switch command {
 		case constants.HELLO_WORLD:
@@ -54,7 +54,8 @@ func (ws *WebSocketController) Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		case constants.LOGIN:
 			{
-				err := json.Unmarshal(payload, &authAttributes)
+				auth := models.Auth{}
+				err := json.Unmarshal(payload, &auth)
 				if err != nil {
 					err := conn.WriteJSON(models.Error{
 						Code:    1,
@@ -62,17 +63,40 @@ func (ws *WebSocketController) Handler(w http.ResponseWriter, r *http.Request) {
 						Message: "JSON has invalid patter or is not accepted",
 					})
 					if err != nil {
-						log.Println(err)
+						message := services.ErrorServiceInstance.ToBytes(models.Error{
+							Code:    constants.INVALID_PAYLOAD,
+							Message: "Invalid payload",
+							Name:    "INVALID_PAYLOAD",
+						})
+						_ = conn.WriteJSON(message)
 					}
 				}
-				authService.Login(conn, &authAttributes)
+				services.AuthServiceInstance.Login(conn, &auth)
 			}
 		case constants.LOGOUT:
 			{
-				authService.Logout(conn)
+				services.AuthServiceInstance.Logout(conn)
+			}
+		case constants.CREATE_ROOM:
+			{
+				room := models.Room{}
+				err := json.Unmarshal(payload, &room)
+				if err != nil {
+					message := services.ErrorServiceInstance.ToBytes(models.Error{
+						Code:    constants.INVALID_PAYLOAD,
+						Message: "Invalid payload",
+						Name:    "INVALID_PAYLOAD",
+					})
+					_ = conn.WriteJSON(message)
+				}
+				services.RoomServiceInstance.CreateRoom(&room)
+				_ = conn.WriteJSON(models.NewResponse(constants.CREATED_ROOM, room))
 			}
 		default:
-			conn.WriteMessage(messageType, []byte("Comando inválido"))
+			log.Println(command)
+			if err := conn.WriteMessage(messageType, []byte("Comando inválido")); err != nil {
+				_ = conn.Close()
+			}
 		}
 	}
 }
